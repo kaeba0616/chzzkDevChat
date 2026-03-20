@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "chzzk-ideas": {
+      "command": "bun",
+      "args": ["./server.ts"]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "chzzk-dev-chat",
+  "version": "1.0.0",
+  "description": "치지직 채팅 아이디어 → Claude Code 채널 연동",
+  "main": "server.ts",
+  "scripts": {
+    "start": "bun run server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "chzzk": "^1.10.4"
+  }
+}
