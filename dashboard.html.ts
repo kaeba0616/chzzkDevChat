@@ -444,6 +444,127 @@ export const dashboardHtml = `<!DOCTYPE html>
     backdrop-filter: blur(12px);
   }
   body.obs-mode .btn-end-vote { display: none; }
+
+  /* ── Vote Create Form ── */
+  .vote-create-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px 32px 0;
+    display: none;
+  }
+  .vote-create-section.active { display: block; }
+  .vote-create-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .vote-create-card h3 {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .vote-create-card input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    margin-bottom: 10px;
+    outline: none;
+  }
+  .vote-create-card input:focus { border-color: var(--accent); }
+  .vote-create-card input::placeholder { color: var(--text-dim); }
+  .vote-options-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .vote-option-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .vote-option-row span {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    width: 20px;
+    flex-shrink: 0;
+  }
+  .vote-option-row input { margin-bottom: 0; flex: 1; }
+  .vote-option-row button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .vote-option-row button:hover { border-color: var(--danger); color: var(--danger); }
+  .vote-create-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .btn-add-option {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 12px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 14px;
+  }
+  .btn-add-option:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-start-vote {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-start-vote:hover { box-shadow: 0 0 16px var(--accent-glow); }
+  .btn-cancel-vote {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-cancel-vote:hover { border-color: var(--text-dim); }
+  .btn-create-vote {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 14px;
+    border: 1px solid var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-create-vote:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  body.obs-mode .vote-create-section { display: none !important; }
+  body.obs-mode .btn-create-vote { display: none !important; }
 </style>
 </head>
 <body>
@@ -462,7 +583,26 @@ export const dashboardHtml = `<!DOCTYPE html>
 
   <div class="toolbar">
     <span class="idea-count">아이디어 <strong id="idea-count">0</strong>개</span>
-    <button class="btn-clear" onclick="clearAll()">전체 삭제</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn-create-vote" id="btn-show-create-vote">투표 생성</button>
+      <button class="btn-clear" onclick="clearAll()">전체 삭제</button>
+    </div>
+  </div>
+
+  <div class="vote-create-section" id="vote-create-section">
+    <div class="vote-create-card">
+      <h3>투표 생성</h3>
+      <input type="text" id="vote-create-question" placeholder="질문 (예: 어떤 프레임워크를 사용할까요?)">
+      <div class="vote-options-inputs" id="vote-create-options">
+        <div class="vote-option-row"><span>1.</span><input type="text" placeholder="선택지 1"></div>
+        <div class="vote-option-row"><span>2.</span><input type="text" placeholder="선택지 2"></div>
+      </div>
+      <button class="btn-add-option" id="btn-add-option">+ 선택지 추가</button>
+      <div class="vote-create-actions">
+        <button class="btn-cancel-vote" id="btn-cancel-create">취소</button>
+        <button class="btn-start-vote" id="btn-start-vote">투표 시작</button>
+      </div>
+    </div>
   </div>
 
   <div class="vote-section" id="vote-section">
@@ -676,6 +816,60 @@ document.getElementById('btn-end-vote').addEventListener('click', function() {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'end_vote' }));
   }
+});
+
+// ── Vote creation form ──
+document.getElementById('btn-show-create-vote').addEventListener('click', function() {
+  var section = document.getElementById('vote-create-section');
+  section.classList.toggle('active');
+});
+
+document.getElementById('btn-cancel-create').addEventListener('click', function() {
+  document.getElementById('vote-create-section').classList.remove('active');
+});
+
+document.getElementById('btn-add-option').addEventListener('click', function() {
+  var container = document.getElementById('vote-create-options');
+  var count = container.children.length + 1;
+  if (count > 9) return;
+  var row = document.createElement('div');
+  row.className = 'vote-option-row';
+  row.innerHTML = '<span>' + count + '.</span><input type="text" placeholder="선택지 ' + count + '"><button type="button" class="btn-remove-option">X</button>';
+  container.appendChild(row);
+});
+
+document.getElementById('vote-create-options').addEventListener('click', function(e) {
+  if (!e.target.classList.contains('btn-remove-option')) return;
+  var container = document.getElementById('vote-create-options');
+  if (container.children.length <= 2) return;
+  e.target.closest('.vote-option-row').remove();
+  // Renumber
+  Array.from(container.children).forEach(function(row, i) {
+    row.querySelector('span').textContent = (i + 1) + '.';
+  });
+});
+
+document.getElementById('btn-start-vote').addEventListener('click', function() {
+  var question = document.getElementById('vote-create-question').value.trim();
+  if (!question) { alert('질문을 입력하세요'); return; }
+  var inputs = document.querySelectorAll('#vote-create-options input');
+  var options = [];
+  inputs.forEach(function(input) {
+    var val = input.value.trim();
+    if (val) options.push(val);
+  });
+  if (options.length < 2) { alert('선택지를 2개 이상 입력하세요'); return; }
+
+  fetch('/test-create-vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: question, options: options })
+  });
+
+  // Reset form
+  document.getElementById('vote-create-question').value = '';
+  document.querySelectorAll('#vote-create-options input').forEach(function(input) { input.value = ''; });
+  document.getElementById('vote-create-section').classList.remove('active');
 });
 
 function esc(s) {
