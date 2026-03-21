@@ -423,30 +423,36 @@ function renderAll() {
 
   empty.style.display = 'none';
 
-  container.innerHTML = ideas.slice().reverse().map(idea => {
-    const time = new Date(idea.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-    const sentClass = idea.sentToClaude ? ' sent' : '';
-    const sentBadge = idea.sentToClaude ? '<span class="sent-badge">SENT</span>' : '';
-    const btnDisabled = idea.sentToClaude ? ' disabled' : '';
-    const btnText = idea.sentToClaude ? '\\u2713 전달됨' : 'Claude에 전달';
-
-    return '<div class="idea-card' + sentClass + '">' +
-      '<div class="idea-content">' +
-        '<div class="idea-meta">' +
-          '<span class="idea-nickname">' + esc(idea.nickname) + '</span>' +
-          '<span class="idea-time">' + time + '</span>' +
-          sentBadge +
-        '</div>' +
-        '<div class="idea-text">' + esc(idea.ideaText) + '</div>' +
-      '</div>' +
-      '<button class="btn-select"' + btnDisabled + " onclick=\"selectIdea('" + idea.id + "')\">" + btnText + '</button>' +
-    '</div>';
+  container.innerHTML = ideas.slice().reverse().map(function(idea) {
+    var time = new Date(idea.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    var sentClass = idea.sentToClaude ? ' sent' : '';
+    var sentBadge = idea.sentToClaude ? '<span class="sent-badge">SENT</span>' : '';
+    var btnDisabled = idea.sentToClaude ? ' disabled' : '';
+    var btnText = idea.sentToClaude ? '\\u2713 전달됨' : 'Claude에 전달';
+    var html = '<div class="idea-card' + sentClass + '">';
+    html += '<div class="idea-content">';
+    html += '<div class="idea-meta">';
+    html += '<span class="idea-nickname">' + esc(idea.nickname) + '</span>';
+    html += '<span class="idea-time">' + time + '</span>';
+    html += sentBadge;
+    html += '</div>';
+    html += '<div class="idea-text">' + esc(idea.ideaText) + '</div>';
+    html += '</div>';
+    html += '<button class="btn-select" data-id="' + idea.id + '"' + btnDisabled + '>' + btnText + '</button>';
+    html += '</div>';
+    return html;
   }).join('');
 }
 
+document.getElementById('ideas').addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn-select');
+  if (!btn || btn.disabled) return;
+  selectIdea(btn.getAttribute('data-id'));
+});
+
 function selectIdea(id) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'select_idea', id }));
+    ws.send(JSON.stringify({ type: 'select_idea', id: id }));
   }
 }
 

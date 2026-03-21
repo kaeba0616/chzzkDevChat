@@ -41,12 +41,12 @@ const server = Bun.serve({
   port: PORT,
   hostname: "127.0.0.1",
 
-  async fetch(req, server) {
-    // WebSocket upgrade
-    if (server.upgrade(req)) return undefined;
+  fetch(req, bunServer) {
+    // WebSocket upgrade — must be handled synchronously (not async)
+    if (bunServer.upgrade(req)) return undefined;
 
-    // Serve dashboard HTML
     const url = new URL(req.url);
+
     if (url.pathname === "/" || url.pathname === "/index.html") {
       return new Response(dashboardHtml, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -64,25 +64,26 @@ const server = Bun.serve({
 
     // API: test idea injection
     if (url.pathname === "/test-idea" && req.method === "POST") {
-      const body = await req.text();
-      const ideaText = body.trim();
-      if (!ideaText) {
-        return Response.json({ error: "empty body" }, { status: 400 });
-      }
-      const idea: Idea = {
-        id: `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        nickname: "테스트유저",
-        userIdHash: "test-hash",
-        message: `!아이디어 ${ideaText}`,
-        ideaText,
-        timestamp: Date.now(),
-        selected: false,
-        sentToClaude: false,
-      };
-      ideas.push(idea);
-      broadcastToDashboard({ type: "new_idea", idea });
-      log(`Test idea added: ${ideaText}`);
-      return Response.json({ ok: true, id: idea.id });
+      return req.text().then((body) => {
+        const ideaText = body.trim();
+        if (!ideaText) {
+          return Response.json({ error: "empty body" }, { status: 400 });
+        }
+        const idea: Idea = {
+          id: `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          nickname: "테스트유저",
+          userIdHash: "test-hash",
+          message: `!아이디어 ${ideaText}`,
+          ideaText,
+          timestamp: Date.now(),
+          selected: false,
+          sentToClaude: false,
+        };
+        ideas.push(idea);
+        broadcastToDashboard({ type: "new_idea", idea });
+        log(`Test idea added: ${ideaText}`);
+        return Response.json({ ok: true, id: idea.id });
+      });
     }
 
     return new Response("Not Found", { status: 404 });
@@ -127,6 +128,15 @@ const server = Bun.serve({
 
 log(`Dashboard: http://127.0.0.1:${PORT}`);
 log(`OBS overlay: http://127.0.0.1:${PORT}/?obs=true`);
+
+// ── Graceful shutdown ──
+function shutdown() {
+  log("Shutting down...");
+  server.stop();
+  process.exit(0);
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 // ── 4. Chzzk chat listener ──
 const NID_AUT = process.env.NID_AUT;
