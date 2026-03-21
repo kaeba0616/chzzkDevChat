@@ -439,7 +439,7 @@ function renderAll() {
         '</div>' +
         '<div class="idea-text">' + esc(idea.ideaText) + '</div>' +
       '</div>' +
-      '<button class="btn-select"' + btnDisabled + ' onclick="selectIdea(\\''+idea.id+'\\')\">' + btnText + '</button>' +
+      '<button class="btn-select"' + btnDisabled + " onclick=\"selectIdea('" + idea.id + "')\">" + btnText + '</button>' +
     '</div>';
   }).join('');
 }
