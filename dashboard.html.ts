@@ -326,6 +326,124 @@ export const dashboardHtml = `<!DOCTYPE html>
   }
 
   body.obs-mode .toast { display: none; }
+
+  /* ── Vote Section ── */
+  .vote-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px 32px 0;
+    display: none;
+  }
+  .vote-section.active { display: block; }
+  .vote-card {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 20px;
+    animation: slideIn 0.3s ease-out;
+  }
+  .vote-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+    display: inline-block;
+  }
+  .vote-question {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+  .vote-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .vote-option-num {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .vote-option-label {
+    font-size: 14px;
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+  .vote-bar-bg {
+    flex: 1;
+    height: 24px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .vote-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .vote-bar-fill.winner { background: #f59e0b; }
+  .vote-bar-count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    width: 50px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .vote-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .vote-total {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .vote-total strong { color: var(--accent); }
+  .btn-end-vote {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border: 1px solid var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--danger);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-end-vote:hover {
+    background: var(--danger);
+    color: white;
+  }
+  .vote-result {
+    text-align: center;
+    padding: 10px;
+    font-weight: 700;
+    color: #f59e0b;
+    font-size: 14px;
+    display: none;
+  }
+  body.obs-mode .vote-section { padding: 0; max-width: 100%; }
+  body.obs-mode .vote-card {
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+  }
+  body.obs-mode .btn-end-vote { display: none; }
 </style>
 </head>
 <body>
@@ -347,6 +465,19 @@ export const dashboardHtml = `<!DOCTYPE html>
     <button class="btn-clear" onclick="clearAll()">전체 삭제</button>
   </div>
 
+  <div class="vote-section" id="vote-section">
+    <div class="vote-card">
+      <span class="vote-label">VOTE</span>
+      <div class="vote-question" id="vote-question"></div>
+      <div id="vote-options"></div>
+      <div class="vote-footer">
+        <span class="vote-total">총 <strong id="vote-total">0</strong>표</span>
+        <button class="btn-end-vote" id="btn-end-vote">투표 종료</button>
+      </div>
+      <div class="vote-result" id="vote-result"></div>
+    </div>
+  </div>
+
   <div class="container">
     <div id="ideas" class="ideas-list"></div>
     <div id="empty" class="empty-state">
@@ -362,6 +493,7 @@ const isObs = new URLSearchParams(location.search).has('obs');
 if (isObs) document.body.classList.add('obs-mode');
 
 let ideas = [];
+let currentVote = null;
 let ws;
 let reconnectDelay = 1000;
 
@@ -405,6 +537,25 @@ function connect() {
         break;
       case 'status':
         setChzzkStatus(msg.chzzk);
+        break;
+      case 'vote_created':
+        currentVote = msg.vote;
+        renderVote();
+        showToast('새 투표가 생성되었습니다');
+        break;
+      case 'vote_updated':
+        currentVote = msg.vote;
+        renderVote();
+        break;
+      case 'vote_ended':
+        currentVote = msg.vote;
+        currentVote.active = false;
+        renderVoteEnded(msg.winnerIndex, msg.winnerLabel);
+        showToast('투표가 종료되었습니다');
+        setTimeout(function() {
+          currentVote = null;
+          document.getElementById('vote-section').classList.remove('active');
+        }, 10000);
         break;
     }
   };
@@ -481,8 +632,54 @@ function showToast(text, isError) {
   el._timer = setTimeout(() => el.className = 'toast', 3000);
 }
 
+function renderVote() {
+  if (!currentVote) return;
+  var section = document.getElementById('vote-section');
+  section.classList.add('active');
+  document.getElementById('vote-question').textContent = currentVote.question;
+  document.getElementById('vote-total').textContent = currentVote.totalVotes;
+  document.getElementById('btn-end-vote').style.display = currentVote.active ? '' : 'none';
+  document.getElementById('vote-result').style.display = 'none';
+
+  var html = '';
+  currentVote.options.forEach(function(opt) {
+    var count = currentVote.votes[opt.index] || 0;
+    var pct = currentVote.totalVotes > 0 ? (count / currentVote.totalVotes * 100) : 0;
+    html += '<div class="vote-option">';
+    html += '<span class="vote-option-num">' + opt.index + '</span>';
+    html += '<span class="vote-option-label">' + esc(opt.label) + '</span>';
+    html += '<div class="vote-bar-bg"><div class="vote-bar-fill" style="width:' + pct + '%"></div></div>';
+    html += '<span class="vote-bar-count">' + count + '</span>';
+    html += '</div>';
+  });
+  document.getElementById('vote-options').innerHTML = html;
+}
+
+function renderVoteEnded(winnerIndex, winnerLabel) {
+  renderVote();
+  document.getElementById('btn-end-vote').style.display = 'none';
+  var result = document.getElementById('vote-result');
+  result.style.display = '';
+  result.textContent = winnerIndex + '번 "' + winnerLabel + '" 선택됨';
+  // Highlight winner bar
+  var options = document.querySelectorAll('#vote-options .vote-option');
+  options.forEach(function(el, i) {
+    if (i === winnerIndex - 1) {
+      var bar = el.querySelector('.vote-bar-fill');
+      if (bar) bar.classList.add('winner');
+    }
+  });
+}
+
+document.getElementById('btn-end-vote').addEventListener('click', function() {
+  if (!confirm('투표를 종료하시겠습니까?')) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'end_vote' }));
+  }
+});
+
 function esc(s) {
-  const d = document.createElement('div');
+  var d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
 }

@@ -1,9 +1,30 @@
 #!/usr/bin/env bun
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { ChzzkClient, ChzzkChat } from "chzzk";
 import { dashboardHtml } from "./dashboard.html.ts";
-import type { Idea, ServerMessage, ClientMessage } from "./types.ts";
+import { toVoteSnapshot } from "./types.ts";
+import type { Idea, Vote, VoteOption, ServerMessage, ClientMessage } from "./types.ts";
+
+// ── Load .env from server directory ──
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, ".env");
+const envFile = await Bun.file(envPath).text().catch(() => "");
+for (const line of envFile.split("\n")) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) continue;
+  const eq = trimmed.indexOf("=");
+  if (eq === -1) continue;
+  const key = trimmed.slice(0, eq).trim();
+  const val = trimmed.slice(eq + 1).trim();
+  if (!process.env[key]) process.env[key] = val;
+}
 
 // ── stderr logging (stdout is reserved for MCP stdio) ──
 function log(msg: string) {
@@ -14,21 +35,72 @@ function log(msg: string) {
 const ideas: Idea[] = [];
 const wsClients = new Set<{ send(data: string): void }>();
 let chzzkConnected = false;
+let activeVote: Vote | null = null;
 
-// ── 1. MCP Server (channel) ──
+// ── 1. MCP Server (channel + tools) ──
 const mcp = new Server(
   { name: "chzzk-ideas", version: "1.0.0" },
   {
-    capabilities: { experimental: { "claude/channel": {} } },
+    capabilities: {
+      experimental: { "claude/channel": {} },
+      tools: {},
+    },
     instructions: [
-      '치지직(Chzzk) 라이브 방송 시청자 아이디어 채널입니다.',
-      '이벤트는 <channel source="chzzk-ideas" idea_id="..." nickname="..."> 태그로 도착합니다.',
-      '시청자가 제안한 아이디어를 스트리머가 선택하면 전달됩니다.',
+      '치지직(Chzzk) 라이브 방송 시청자와 상호작용하는 채널입니다.',
+      '시청자가 제안한 아이디어는 <channel source="chzzk-ideas" idea_id="..." nickname="..."> 태그로 도착합니다.',
       '아이디어 내용을 읽고 코딩 작업을 수행해주세요.',
+      '',
+      '여러 선택지 중 사용자의 결정이 필요할 때는 create_vote 도구를 호출하세요.',
+      '투표가 생성되면 시청자들이 채팅에서 "!투표 번호"로 투표합니다.',
+      '스트리머가 투표를 종료하면 결과가 channel 알림으로 전달됩니다.',
+      '투표 결과를 받으면 가장 많은 표를 받은 선택지를 기반으로 작업을 진행하세요.',
+      '',
       '응답은 한국어로 해주세요.',
     ].join(" "),
   }
 );
+
+// ── MCP Tool handlers ──
+mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: "create_vote",
+      description:
+        "시청자 투표를 생성합니다. 사용자에게 선택지를 제시할 때 이 도구를 호출하세요. " +
+        "시청자들이 채팅에서 '!투표 번호'로 투표하고, 스트리머가 투표를 종료하면 결과가 알림으로 전달됩니다.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          question: {
+            type: "string",
+            description: "투표 질문 (예: '어떤 프레임워크를 사용할까요?')",
+          },
+          options: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 2,
+            maxItems: 9,
+            description: "투표 선택지 배열 (2~9개). 순서대로 1번, 2번, ... 이 됩니다.",
+          },
+        },
+        required: ["question", "options"],
+      },
+    },
+  ],
+}));
+
+mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  if (name === "create_vote") {
+    return handleCreateVote(args as { question: string; options: string[] });
+  }
+
+  return {
+    content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
+    isError: true,
+  };
+});
 
 // ── 2. Connect MCP over stdio ──
 await mcp.connect(new StdioServerTransport());
@@ -86,6 +158,19 @@ const server = Bun.serve({
       });
     }
 
+    // API: test vote
+    if (url.pathname === "/test-vote" && req.method === "POST") {
+      return req.text().then((body) => {
+        const userHash = `test-${Math.random().toString(36).slice(2, 8)}`;
+        const optionNum = parseInt(body.trim(), 10);
+        if (isNaN(optionNum)) {
+          return Response.json({ error: "invalid option number" }, { status: 400 });
+        }
+        handleVoteChatMessage(userHash, "테스트유저", optionNum);
+        return Response.json({ ok: true });
+      });
+    }
+
     return new Response("Not Found", { status: 404 });
   },
 
@@ -101,6 +186,15 @@ const server = Bun.serve({
           dashboard: wsClients.size,
         } satisfies ServerMessage)
       );
+      // Send active vote if exists
+      if (activeVote?.active) {
+        ws.send(
+          JSON.stringify({
+            type: "vote_created",
+            vote: toVoteSnapshot(activeVote),
+          } satisfies ServerMessage)
+        );
+      }
       log(`Dashboard connected (total: ${wsClients.size})`);
     },
 
@@ -113,6 +207,8 @@ const server = Bun.serve({
           ideas.length = 0;
           broadcastToDashboard({ type: "clear_ideas" });
           log("All ideas cleared");
+        } else if (msg.type === "end_vote") {
+          handleEndVote();
         }
       } catch {
         log(`Invalid WS message: ${String(raw)}`);
@@ -183,8 +279,24 @@ if (!CHANNEL_ID) {
         if (event.hidden || event.isRecent) return;
 
         const message = event.message;
-        const PREFIX = "!아이디어";
 
+        // ── Vote handling ──
+        const VOTE_PREFIX = "!투표";
+        if (message.startsWith(VOTE_PREFIX)) {
+          const arg = message.slice(VOTE_PREFIX.length).trim();
+          const optionNum = parseInt(arg, 10);
+          if (!isNaN(optionNum) && optionNum >= 1 && optionNum <= 9) {
+            handleVoteChatMessage(
+              event.profile.userIdHash,
+              event.profile.nickname,
+              optionNum
+            );
+          }
+          return;
+        }
+
+        // ── Idea handling ──
+        const PREFIX = "!아이디어";
         if (!message.startsWith(PREFIX)) return;
 
         const ideaText = message.slice(PREFIX.length).trim();
@@ -230,7 +342,6 @@ async function handleSelectIdea(id: string) {
   idea.selected = true;
   idea.sentToClaude = true;
 
-  // Send to Claude Code via MCP channel notification
   try {
     await mcp.notification({
       method: "notifications/claude/channel",
@@ -250,6 +361,128 @@ async function handleSelectIdea(id: string) {
   }
 
   broadcastToDashboard({ type: "idea_selected", id });
+}
+
+// ── Vote functions ──
+
+function handleCreateVote(args: { question: string; options: string[] }) {
+  if (activeVote?.active) {
+    activeVote.active = false;
+  }
+
+  const options: VoteOption[] = args.options.map((label, i) => ({
+    index: i + 1,
+    label,
+  }));
+
+  const votes: Record<number, number> = {};
+  for (const opt of options) {
+    votes[opt.index] = 0;
+  }
+
+  activeVote = {
+    id: `vote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    question: args.question,
+    options,
+    votes,
+    voters: new Set(),
+    createdAt: Date.now(),
+    active: true,
+  };
+
+  broadcastToDashboard({
+    type: "vote_created",
+    vote: toVoteSnapshot(activeVote),
+  });
+  log(`Vote created: ${args.question} (${args.options.length} options)`);
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text:
+          `투표가 생성되었습니다: "${args.question}"\n` +
+          `선택지: ${options.map((o) => `${o.index}. ${o.label}`).join(", ")}\n` +
+          `시청자들이 '!투표 번호'로 투표합니다. 스트리머가 종료하면 결과가 전달됩니다.`,
+      },
+    ],
+  };
+}
+
+function handleVoteChatMessage(
+  userIdHash: string,
+  nickname: string,
+  optionNum: number
+) {
+  if (!activeVote?.active) return;
+  if (activeVote.voters.has(userIdHash)) {
+    log(`Duplicate vote blocked: ${nickname}`);
+    return;
+  }
+  if (!activeVote.votes.hasOwnProperty(optionNum)) return;
+
+  activeVote.voters.add(userIdHash);
+  activeVote.votes[optionNum]++;
+
+  broadcastToDashboard({
+    type: "vote_updated",
+    vote: toVoteSnapshot(activeVote),
+  });
+  log(
+    `Vote from ${nickname}: option ${optionNum} (${activeVote.options[optionNum - 1]?.label})`
+  );
+}
+
+async function handleEndVote() {
+  if (!activeVote?.active) return;
+
+  activeVote.active = false;
+
+  const snapshot = toVoteSnapshot(activeVote);
+
+  let winnerIndex = 1;
+  let maxVotes = 0;
+  for (const [idx, count] of Object.entries(activeVote.votes)) {
+    if (count > maxVotes) {
+      maxVotes = count;
+      winnerIndex = Number(idx);
+    }
+  }
+  const winnerLabel =
+    activeVote.options.find((o) => o.index === winnerIndex)?.label ?? "";
+
+  broadcastToDashboard({
+    type: "vote_ended",
+    vote: snapshot,
+    winnerIndex,
+    winnerLabel,
+  });
+
+  const resultLines = activeVote.options.map(
+    (o) => `  ${o.index}. ${o.label}: ${activeVote!.votes[o.index]}표`
+  );
+
+  try {
+    await mcp.notification({
+      method: "notifications/claude/channel",
+      params: {
+        content:
+          `투표 결과: "${activeVote.question}"\n` +
+          resultLines.join("\n") +
+          `\n\n결과: ${winnerIndex}번 "${winnerLabel}" (${maxVotes}표)` +
+          `\n총 투표 수: ${snapshot.totalVotes}명`,
+        meta: {
+          vote_id: activeVote.id,
+          winner_index: String(winnerIndex),
+          winner_label: winnerLabel,
+          total_votes: String(snapshot.totalVotes),
+        },
+      },
+    });
+    log(`Vote result sent to Claude: winner=${winnerIndex} "${winnerLabel}"`);
+  } catch (err) {
+    log(`Failed to send vote result: ${err}`);
+  }
 }
 
 function broadcastToDashboard(msg: ServerMessage) {
