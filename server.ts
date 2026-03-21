@@ -158,6 +158,17 @@ const server = Bun.serve({
       });
     }
 
+    // API: test vote creation
+    if (url.pathname === "/test-create-vote" && req.method === "POST") {
+      return req.json().then((body: any) => {
+        const result = handleCreateVote({
+          question: body.question || "어떤 것을 선택할까요?",
+          options: body.options || ["옵션 1", "옵션 2", "옵션 3"],
+        });
+        return Response.json({ ok: true, result });
+      });
+    }
+
     // API: test vote
     if (url.pathname === "/test-vote" && req.method === "POST") {
       return req.text().then((body) => {
