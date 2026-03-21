@@ -30,14 +30,21 @@
 ## 설치
 
 ```bash
-# Bun 설치 (없는 경우)
-curl -fsSL https://bun.sh/install | bash
+# 1. 레포 클론
+git clone https://github.com/kaeba0616/chzzkDevChat.git
+cd chzzkDevChat
 
-# 의존성 설치
+# 2. Bun 설치 (없는 경우)
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+
+# 3. 의존성 설치
 bun install
 ```
 
 ## 설정
+
+### 1. 치지직 인증 (선택)
 
 `.env` 파일을 생성하고 치지직 인증 정보를 입력합니다:
 
@@ -52,15 +59,35 @@ CHZZK_CHANNEL_ID=your_channel_id_here
 
 > 치지직 쿠키 없이도 대시보드 테스트는 가능합니다. 채팅 연동만 비활성화됩니다.
 
+### 2. MCP 서버 등록
+
+`~/.mcp.json`에 추가하면 **어떤 프로젝트 디렉토리에서든** 사용할 수 있습니다:
+
+```json
+{
+  "mcpServers": {
+    "chzzk-ideas": {
+      "command": "bun",
+      "args": ["/절대경로/chzzkDevChat/server.ts"]
+    }
+  }
+}
+```
+
+> `args`의 경로를 본인이 클론한 위치에 맞게 수정하세요.
+
 ## 실행
 
-### 실제 사용 (Claude Code 연동)
+### Claude Code 연동 (실제 사용)
+
+코딩 작업을 수행할 프로젝트 디렉토리에서 실행합니다:
 
 ```bash
+cd ~/dev/my-project  # 아이디어를 구현할 프로젝트
 claude --dangerously-load-development-channels server:chzzk-ideas
 ```
 
-Claude Code가 `.mcp.json`을 읽고 `bun ./server.ts`를 자동으로 subprocess로 실행합니다.
+Claude Code가 `~/.mcp.json`을 읽고 서버를 자동으로 실행합니다. 시청자 아이디어를 선택하면 **현재 디렉토리**에서 Claude가 코딩 작업을 수행합니다.
 
 - **대시보드**: http://localhost:8789
 - **OBS 오버레이**: http://localhost:8789/?obs=true
@@ -70,6 +97,7 @@ Claude Code가 `.mcp.json`을 읽고 `bun ./server.ts`를 자동으로 subproces
 Claude Code 없이 대시보드만 확인하고 싶은 경우:
 
 ```bash
+cd /클론한경로/chzzkDevChat
 bun run server.ts
 ```
 
