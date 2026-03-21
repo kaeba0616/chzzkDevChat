@@ -62,6 +62,29 @@ const server = Bun.serve({
       });
     }
 
+    // API: test idea injection
+    if (url.pathname === "/test-idea" && req.method === "POST") {
+      const body = await req.text();
+      const ideaText = body.trim();
+      if (!ideaText) {
+        return Response.json({ error: "empty body" }, { status: 400 });
+      }
+      const idea: Idea = {
+        id: `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        nickname: "테스트유저",
+        userIdHash: "test-hash",
+        message: `!아이디어 ${ideaText}`,
+        ideaText,
+        timestamp: Date.now(),
+        selected: false,
+        sentToClaude: false,
+      };
+      ideas.push(idea);
+      broadcastToDashboard({ type: "new_idea", idea });
+      log(`Test idea added: ${ideaText}`);
+      return Response.json({ ok: true, id: idea.id });
+    }
+
     return new Response("Not Found", { status: 404 });
   },
 

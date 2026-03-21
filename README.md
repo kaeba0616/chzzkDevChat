@@ -39,7 +39,7 @@ bun install
 
 ## 설정
 
-`.env` 파일에 치지직 인증 정보를 입력합니다:
+`.env` 파일을 생성하고 치지직 인증 정보를 입력합니다:
 
 ```env
 # 네이버 로그인 후 브라우저 개발자 도구 > Application > Cookies에서 확인
@@ -50,16 +50,45 @@ NID_SES=your_nid_ses_here
 CHZZK_CHANNEL_ID=your_channel_id_here
 ```
 
+> 치지직 쿠키 없이도 대시보드 테스트는 가능합니다. 채팅 연동만 비활성화됩니다.
+
 ## 실행
+
+### 실제 사용 (Claude Code 연동)
 
 ```bash
 claude --dangerously-load-development-channels server:chzzk-ideas
 ```
 
-Claude Code가 `.mcp.json`을 읽고 `bun ./server.ts`를 자동 실행합니다.
+Claude Code가 `.mcp.json`을 읽고 `bun ./server.ts`를 자동으로 subprocess로 실행합니다.
 
 - **대시보드**: http://localhost:8789
 - **OBS 오버레이**: http://localhost:8789/?obs=true
+
+### 대시보드만 테스트
+
+Claude Code 없이 대시보드만 확인하고 싶은 경우:
+
+```bash
+bun run server.ts
+```
+
+> MCP stdio 연결 관련 에러가 나올 수 있지만 대시보드는 정상 동작합니다.
+
+## 테스트
+
+치지직 방송 없이도 테스트용 API로 아이디어를 주입할 수 있습니다:
+
+```bash
+# 테스트 아이디어 추가
+curl -X POST localhost:8789/test-idea -d "할일 목록 앱을 만들어주세요"
+
+# 여러 개 추가
+curl -X POST localhost:8789/test-idea -d "계산기 만들어줘"
+curl -X POST localhost:8789/test-idea -d "뱀 게임 만들어줘"
+```
+
+대시보드(http://localhost:8789)에서 아이디어가 실시간으로 표시되고, "Claude에 전달" 버튼으로 Claude Code에 전달할 수 있습니다.
 
 ## 사용법
 
