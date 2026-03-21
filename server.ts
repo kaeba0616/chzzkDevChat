@@ -41,7 +41,7 @@ const server = Bun.serve({
   port: PORT,
   hostname: "127.0.0.1",
 
-  fetch(req, server) {
+  async fetch(req, server) {
     // WebSocket upgrade
     if (server.upgrade(req)) return undefined;
 
