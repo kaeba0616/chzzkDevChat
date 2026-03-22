@@ -36,6 +36,7 @@ const ideas: Idea[] = [];
 const wsClients = new Set<{ send(data: string): void }>();
 let chzzkConnected = false;
 let activeVote: Vote | null = null;
+let ideaCollectionActive = false;
 
 // ── 1. MCP Server (channel + tools) ──
 const mcp = new Server(
@@ -206,6 +207,7 @@ const server = Bun.serve({
           } satisfies ServerMessage)
         );
       }
+      ws.send(JSON.stringify({ type: "idea_collection_status", active: ideaCollectionActive } satisfies ServerMessage));
       log(`Dashboard connected (total: ${wsClients.size})`);
     },
 
@@ -220,6 +222,10 @@ const server = Bun.serve({
           log("All ideas cleared");
         } else if (msg.type === "end_vote") {
           handleEndVote();
+        } else if (msg.type === "toggle_idea_collection") {
+          ideaCollectionActive = !ideaCollectionActive;
+          broadcastToDashboard({ type: "idea_collection_status", active: ideaCollectionActive });
+          log(`Idea collection ${ideaCollectionActive ? "started" : "stopped"}`);
         }
       } catch {
         log(`Invalid WS message: ${String(raw)}`);
@@ -307,6 +313,7 @@ if (!CHANNEL_ID) {
         }
 
         // ── Idea handling ──
+        if (!ideaCollectionActive) return;
         const PREFIX = "!아이디어";
         if (!message.startsWith(PREFIX)) return;
 

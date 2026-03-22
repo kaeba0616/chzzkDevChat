@@ -58,10 +58,12 @@ export type ServerMessage =
   | { type: "clear_ideas" }
   | { type: "vote_created"; vote: VoteSnapshot }
   | { type: "vote_updated"; vote: VoteSnapshot }
-  | { type: "vote_ended"; vote: VoteSnapshot; winnerIndex: number; winnerLabel: string };
+  | { type: "vote_ended"; vote: VoteSnapshot; winnerIndex: number; winnerLabel: string }
+  | { type: "idea_collection_status"; active: boolean };
 
 // Dashboard → Server
 export type ClientMessage =
   | { type: "select_idea"; id: string }
   | { type: "clear_ideas" }
-  | { type: "end_vote" };
+  | { type: "end_vote" }
+  | { type: "toggle_idea_collection" };

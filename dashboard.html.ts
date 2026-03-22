@@ -584,6 +584,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div class="toolbar">
     <span class="idea-count">아이디어 <strong id="idea-count">0</strong>개</span>
     <div style="display:flex;gap:8px">
+      <button class="btn-select" id="btn-toggle-ideas" style="padding:6px 14px;font-size:12px">아이디어 수집 시작</button>
       <button class="btn-create-vote" id="btn-show-create-vote">투표 생성</button>
       <button class="btn-clear" onclick="clearAll()">전체 삭제</button>
     </div>
@@ -634,6 +635,7 @@ if (isObs) document.body.classList.add('obs-mode');
 
 let ideas = [];
 let currentVote = null;
+let ideaCollectionActive = false;
 let ws;
 let reconnectDelay = 1000;
 
@@ -677,6 +679,10 @@ function connect() {
         break;
       case 'status':
         setChzzkStatus(msg.chzzk);
+        break;
+      case 'idea_collection_status':
+        ideaCollectionActive = msg.active;
+        updateIdeaToggleBtn();
         break;
       case 'vote_created':
         currentVote = msg.vote;
@@ -809,6 +815,27 @@ function renderVoteEnded(winnerIndex, winnerLabel) {
       if (bar) bar.classList.add('winner');
     }
   });
+}
+
+document.getElementById('btn-toggle-ideas').addEventListener('click', function() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'toggle_idea_collection' }));
+  }
+});
+
+function updateIdeaToggleBtn() {
+  var btn = document.getElementById('btn-toggle-ideas');
+  if (ideaCollectionActive) {
+    btn.textContent = '아이디어 수집 중지';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = 'var(--bg)';
+    btn.style.borderColor = 'var(--accent)';
+  } else {
+    btn.textContent = '아이디어 수집 시작';
+    btn.style.background = 'var(--accent-dim)';
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'var(--accent)';
+  }
 }
 
 document.getElementById('btn-end-vote').addEventListener('click', function() {
