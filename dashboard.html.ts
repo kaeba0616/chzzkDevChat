@@ -736,8 +736,8 @@ export const dashboardHtml = `<!DOCTYPE html>
       <div class="settings-field">
         <label>치지직 채널 ID *</label>
         <div style="display:flex;align-items:center;gap:0">
-          <button type="button" id="btn-toggle-channel-vis" style="background:none;border:1px solid var(--border);border-right:none;border-radius:4px 0 0 4px;padding:8px 10px;cursor:pointer;color:var(--text-dim);font-size:14px;line-height:1" title="보이기/숨기기">&#x1f441;</button>
-          <input type="password" id="settings-channel-id" placeholder="예: 21b9a5adb5fb54e88d1c842d31d6e882" style="border-radius:0 4px 4px 0">
+          <input type="password" id="settings-channel-id" placeholder="예: 21b9a5adb5fb54e88d1c842d31d6e882" style="border-radius:4px 0 0 4px">
+          <button type="button" id="btn-toggle-channel-vis" style="background:none;border:1px solid var(--border);border-left:none;border-radius:0 4px 4px 0;padding:8px 10px;cursor:pointer;color:var(--text-dim);font-size:14px;line-height:1" title="보이기/숨기기">&#x1f441;</button>
         </div>
         <div class="hint">채널 URL에서 확인: chzzk.naver.com/live/<b>채널ID</b></div>
       </div>
