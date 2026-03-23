@@ -565,6 +565,106 @@ export const dashboardHtml = `<!DOCTYPE html>
   }
   body.obs-mode .vote-create-section { display: none !important; }
   body.obs-mode .btn-create-vote { display: none !important; }
+
+  /* ── Settings Modal ── */
+  .settings-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .settings-overlay.active { display: flex; }
+  .settings-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    width: 480px;
+    max-width: 90vw;
+  }
+  .settings-card h3 {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .settings-field {
+    margin-bottom: 14px;
+  }
+  .settings-field label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .settings-field input {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    outline: none;
+  }
+  .settings-field input:focus { border-color: var(--accent); }
+  .settings-field input::placeholder { color: var(--text-dim); }
+  .settings-field .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+  .settings-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 20px;
+  }
+  .btn-settings {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-settings:hover {
+    border-color: var(--text);
+    color: var(--text);
+  }
+  .btn-save-settings {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-save-settings:hover { box-shadow: 0 0 16px var(--accent-glow); }
+  .btn-save-settings:disabled { opacity: 0.5; cursor: default; }
+  .settings-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-top: 12px;
+    padding: 8px;
+    border-radius: 4px;
+    display: none;
+  }
+  .settings-status.success { display: block; background: var(--accent-dim); color: var(--accent); }
+  .settings-status.error { display: block; background: rgba(239,68,68,0.1); color: var(--danger); }
+  body.obs-mode .btn-settings { display: none !important; }
+  body.obs-mode .settings-overlay { display: none !important; }
 </style>
 </head>
 <body>
@@ -587,6 +687,7 @@ export const dashboardHtml = `<!DOCTYPE html>
       <button class="btn-select" id="btn-toggle-ideas" style="padding:6px 14px;font-size:12px">아이디어 수집 시작</button>
       <button class="btn-create-vote" id="btn-show-create-vote">투표 생성</button>
       <button class="btn-clear" onclick="clearAll()">전체 삭제</button>
+      <button class="btn-settings" id="btn-settings">설정</button>
     </div>
   </div>
 
@@ -628,6 +729,30 @@ export const dashboardHtml = `<!DOCTYPE html>
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="settings-card">
+      <h3>설정</h3>
+      <div class="settings-field">
+        <label>치지직 채널 ID *</label>
+        <input type="text" id="settings-channel-id" placeholder="예: 21b9a5adb5fb54e88d1c842d31d6e882">
+        <div class="hint">채널 URL에서 확인: chzzk.naver.com/live/<b>채널ID</b></div>
+      </div>
+      <div class="settings-field">
+        <label>NID_AUT (선택)</label>
+        <input type="password" id="settings-nid-auth" placeholder="성인 인증 방송이 아니면 비워두세요">
+      </div>
+      <div class="settings-field">
+        <label>NID_SES (선택)</label>
+        <input type="password" id="settings-nid-ses" placeholder="성인 인증 방송이 아니면 비워두세요">
+      </div>
+      <div class="settings-status" id="settings-status"></div>
+      <div class="settings-actions">
+        <button class="btn-cancel-vote" id="btn-close-settings">닫기</button>
+        <button class="btn-save-settings" id="btn-save-settings">저장 및 연결</button>
+      </div>
+    </div>
+  </div>
 
 <script>
 const isObs = new URLSearchParams(location.search).has('obs');
@@ -897,6 +1022,59 @@ document.getElementById('btn-start-vote').addEventListener('click', function() {
   document.getElementById('vote-create-question').value = '';
   document.querySelectorAll('#vote-create-options input').forEach(function(input) { input.value = ''; });
   document.getElementById('vote-create-section').classList.remove('active');
+});
+
+// ── Settings ──
+document.getElementById('btn-settings').addEventListener('click', function() {
+  document.getElementById('settings-overlay').classList.add('active');
+  document.getElementById('settings-status').className = 'settings-status';
+  fetch('/api/settings').then(function(r) { return r.json(); }).then(function(data) {
+    document.getElementById('settings-channel-id').value = data.chzzkChannelId || '';
+    document.getElementById('settings-nid-auth').value = data.nidAuth || '';
+    document.getElementById('settings-nid-ses').value = data.nidSession || '';
+  });
+});
+
+document.getElementById('btn-close-settings').addEventListener('click', function() {
+  document.getElementById('settings-overlay').classList.remove('active');
+});
+
+document.getElementById('settings-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('active');
+});
+
+document.getElementById('btn-save-settings').addEventListener('click', function() {
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = '연결 중...';
+  var statusEl = document.getElementById('settings-status');
+
+  var payload = {
+    chzzkChannelId: document.getElementById('settings-channel-id').value,
+    nidAuth: document.getElementById('settings-nid-auth').value,
+    nidSession: document.getElementById('settings-nid-ses').value,
+  };
+
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    btn.disabled = false;
+    btn.textContent = '저장 및 연결';
+    if (data.chzzkConnected) {
+      statusEl.className = 'settings-status success';
+      statusEl.textContent = '치지직 연결 성공!';
+    } else {
+      statusEl.className = 'settings-status error';
+      statusEl.textContent = '저장됨. 방송이 켜져 있는지 확인하세요.';
+    }
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = '저장 및 연결';
+    statusEl.className = 'settings-status error';
+    statusEl.textContent = '저장 실패';
+  });
 });
 
 function esc(s) {

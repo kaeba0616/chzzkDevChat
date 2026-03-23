@@ -135,6 +135,35 @@ const server = Bun.serve({
       });
     }
 
+    // API: get settings
+    if (url.pathname === "/api/settings" && req.method === "GET") {
+      return Response.json({
+        chzzkChannelId: currentConfig.chzzkChannelId,
+        nidAuth: currentConfig.nidAuth ? "••••••" : "",
+        nidSession: currentConfig.nidSession ? "••••••" : "",
+        chzzkConnected,
+      });
+    }
+
+    // API: save settings
+    if (url.pathname === "/api/settings" && req.method === "POST") {
+      return req.json().then(async (body: any) => {
+        if (body.chzzkChannelId !== undefined) {
+          currentConfig.chzzkChannelId = body.chzzkChannelId.trim();
+        }
+        if (body.nidAuth !== undefined && body.nidAuth !== "••••••") {
+          currentConfig.nidAuth = body.nidAuth.trim();
+        }
+        if (body.nidSession !== undefined && body.nidSession !== "••••••") {
+          currentConfig.nidSession = body.nidSession.trim();
+        }
+        await saveConfig(currentConfig);
+        // Reconnect with new settings
+        await connectChzzk();
+        return Response.json({ ok: true, chzzkConnected });
+      });
+    }
+
     // API: test idea injection
     if (url.pathname === "/test-idea" && req.method === "POST") {
       return req.text().then((body) => {
@@ -251,97 +280,143 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-// ── 4. Chzzk chat listener ──
-const NID_AUT = process.env.NID_AUT;
-const NID_SES = process.env.NID_SES;
-const CHANNEL_ID = process.env.CHZZK_CHANNEL_ID;
+// ── 4. Config management ──
+const configPath = resolve(__dirname, "config.json");
 
-if (!CHANNEL_ID) {
-  log("WARNING: CHZZK_CHANNEL_ID not set in .env - chat listener disabled");
-} else {
+interface AppConfig {
+  chzzkChannelId: string;
+  nidAuth: string;
+  nidSession: string;
+}
+
+async function loadConfig(): Promise<AppConfig> {
+  // Try config.json first, then .env
+  try {
+    const raw = await Bun.file(configPath).text();
+    return JSON.parse(raw);
+  } catch {
+    return {
+      chzzkChannelId: process.env.CHZZK_CHANNEL_ID || "",
+      nidAuth: process.env.NID_AUT || "",
+      nidSession: process.env.NID_SES || "",
+    };
+  }
+}
+
+async function saveConfig(config: AppConfig) {
+  await Bun.write(configPath, JSON.stringify(config, null, 2));
+  log("Config saved");
+}
+
+let currentConfig = await loadConfig();
+
+// ── 5. Chzzk chat listener ──
+let activeChat: ChzzkChat | null = null;
+
+function handleChatEvent(event: { hidden: boolean; isRecent: boolean; message: string; profile: { nickname: string; userIdHash: string }; time: number }) {
+  if (event.hidden || event.isRecent) return;
+
+  const message = event.message;
+
+  // ── Vote handling ──
+  const VOTE_PREFIX = "!투표";
+  if (message.startsWith(VOTE_PREFIX)) {
+    const arg = message.slice(VOTE_PREFIX.length).trim();
+    const optionNum = parseInt(arg, 10);
+    if (!isNaN(optionNum) && optionNum >= 1 && optionNum <= 9) {
+      handleVoteChatMessage(
+        event.profile.userIdHash,
+        event.profile.nickname,
+        optionNum
+      );
+    }
+    return;
+  }
+
+  // ── Idea handling ──
+  if (!ideaCollectionActive) return;
+  const PREFIX = "!아이디어";
+  if (!message.startsWith(PREFIX)) return;
+
+  const ideaText = message.slice(PREFIX.length).trim();
+  if (!ideaText) return;
+
+  const idea: Idea = {
+    id: `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    nickname: event.profile.nickname,
+    userIdHash: event.profile.userIdHash,
+    message,
+    ideaText,
+    timestamp: event.time || Date.now(),
+    selected: false,
+    sentToClaude: false,
+  };
+
+  ideas.push(idea);
+  broadcastToDashboard({ type: "new_idea", idea });
+  log(`New idea from ${idea.nickname}: ${idea.ideaText}`);
+}
+
+async function connectChzzk() {
+  // Disconnect existing
+  if (activeChat) {
+    try { await activeChat.disconnect(); } catch {}
+    activeChat = null;
+    chzzkConnected = false;
+    broadcastStatus();
+  }
+
+  const channelId = currentConfig.chzzkChannelId;
+  if (!channelId) {
+    log("WARNING: CHZZK_CHANNEL_ID not set - chat listener disabled");
+    return;
+  }
+
   const client = new ChzzkClient({
-    nidAuth: NID_AUT,
-    nidSession: NID_SES,
+    nidAuth: currentConfig.nidAuth || undefined,
+    nidSession: currentConfig.nidSession || undefined,
   });
 
   try {
-    const liveDetail = await client.live.detail(CHANNEL_ID);
+    const liveDetail = await client.live.detail(channelId);
     if (!liveDetail?.chatChannelId) {
       log("WARNING: Could not get chat channel ID. Is the stream live?");
-    } else {
-      const chat = client.chat({
-        chatChannelId: liveDetail.chatChannelId,
-        channelId: CHANNEL_ID,
-      });
-
-      chat.on("connect", () => {
-        chzzkConnected = true;
-        log("Chzzk chat connected");
-        broadcastStatus();
-      });
-
-      chat.on("disconnect", () => {
-        chzzkConnected = false;
-        log("Chzzk chat disconnected");
-        broadcastStatus();
-      });
-
-      chat.on("reconnect", () => {
-        chzzkConnected = true;
-        log("Chzzk chat reconnected");
-        broadcastStatus();
-      });
-
-      chat.on("chat", (event) => {
-        if (event.hidden || event.isRecent) return;
-
-        const message = event.message;
-
-        // ── Vote handling ──
-        const VOTE_PREFIX = "!투표";
-        if (message.startsWith(VOTE_PREFIX)) {
-          const arg = message.slice(VOTE_PREFIX.length).trim();
-          const optionNum = parseInt(arg, 10);
-          if (!isNaN(optionNum) && optionNum >= 1 && optionNum <= 9) {
-            handleVoteChatMessage(
-              event.profile.userIdHash,
-              event.profile.nickname,
-              optionNum
-            );
-          }
-          return;
-        }
-
-        // ── Idea handling ──
-        if (!ideaCollectionActive) return;
-        const PREFIX = "!아이디어";
-        if (!message.startsWith(PREFIX)) return;
-
-        const ideaText = message.slice(PREFIX.length).trim();
-        if (!ideaText) return;
-
-        const idea: Idea = {
-          id: `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          nickname: event.profile.nickname,
-          userIdHash: event.profile.userIdHash,
-          message,
-          ideaText,
-          timestamp: event.time || Date.now(),
-          selected: false,
-          sentToClaude: false,
-        };
-
-        ideas.push(idea);
-        broadcastToDashboard({ type: "new_idea", idea });
-        log(`New idea from ${idea.nickname}: ${idea.ideaText}`);
-      });
-
-      await chat.connect();
+      return;
     }
+
+    const chat = client.chat({
+      chatChannelId: liveDetail.chatChannelId,
+      channelId: channelId,
+    });
+
+    chat.on("connect", () => {
+      chzzkConnected = true;
+      log("Chzzk chat connected");
+      broadcastStatus();
+    });
+
+    chat.on("disconnect", () => {
+      chzzkConnected = false;
+      log("Chzzk chat disconnected");
+      broadcastStatus();
+    });
+
+    chat.on("reconnect", () => {
+      chzzkConnected = true;
+      log("Chzzk chat reconnected");
+      broadcastStatus();
+    });
+
+    chat.on("chat", handleChatEvent);
+
+    await chat.connect();
+    activeChat = chat;
   } catch (err) {
     log(`Chzzk connection error: ${err}`);
   }
 }
+
+await connectChzzk();
 
 // ── Core functions ──
 
