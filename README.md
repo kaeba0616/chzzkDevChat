@@ -1,6 +1,6 @@
 # chzzkDevChat
 
-치지직(Chzzk) 라이브 방송 시청자가 채팅으로 아이디어를 제안하면, 스트리머가 웹 대시보드에서 선택하여 Claude Code에 직접 전달하는 시스템입니다.
+치지직(Chzzk) 라이브 방송 시청자가 채팅으로 아이디어를 제안하면, 스트리머가 웹 대시보드에서 선택하여 Claude Code에 직접 전달하는 시스템입니다. 시청자 투표 기능도 지원합니다.
 
 ## 워크플로우
 
@@ -10,6 +10,7 @@
     → 스트리머가 선택 클릭
     → Claude Code 세션에 전달
     → Claude가 코딩 수행
+    → 선택지가 나오면 시청자 투표로 결정
 ```
 
 ## 아키텍처
@@ -17,14 +18,14 @@
 단일 Bun 프로세스에서 3가지 서브시스템을 운영합니다:
 
 ```
-[치지직 채팅 WebSocket] --(!아이디어 필터)--> [In-Memory Ideas]
-                                                  |
-                              WebSocket <-------->|
-                                  |               |
-                          [웹 대시보드/OBS]        |
-                          (스트리머가 선택 클릭)    |
-                                  |               v
-                              [MCP Channel Server] --stdio--> [Claude Code 세션]
+[치지직 채팅 WebSocket] --(!아이디어, !투표)--> [In-Memory State]
+                                                     |
+                                 WebSocket <-------->|
+                                     |               |
+                             [웹 대시보드/OBS]        |
+                             (설정, 아이디어, 투표)    |
+                                     |               v
+                                 [MCP Channel Server] --stdio--> [Claude Code 세션]
 ```
 
 ## 설치
@@ -44,22 +45,7 @@ bun install
 
 ## 설정
 
-### 1. 치지직 인증 (선택)
-
-`.env` 파일을 생성하고 치지직 인증 정보를 입력합니다:
-
-```env
-# 네이버 로그인 후 브라우저 개발자 도구 > Application > Cookies에서 확인
-NID_AUT=your_nid_aut_here
-NID_SES=your_nid_ses_here
-
-# 치지직 채널 페이지 URL에서 확인 (예: chzzk.naver.com/live/xxxx)
-CHZZK_CHANNEL_ID=your_channel_id_here
-```
-
-> 치지직 쿠키 없이도 대시보드 테스트는 가능합니다. 채팅 연동만 비활성화됩니다.
-
-### 2. MCP 서버 등록
+### MCP 서버 등록
 
 `~/.mcp.json`에 추가하면 **어떤 프로젝트 디렉토리에서든** 사용할 수 있습니다:
 
@@ -76,55 +62,67 @@ CHZZK_CHANNEL_ID=your_channel_id_here
 
 > `args`의 경로를 본인이 클론한 위치에 맞게 수정하세요.
 
+### 치지직 채널 연결
+
+`.env` 파일 수정 없이 **대시보드 웹 UI에서 설정**할 수 있습니다:
+
+1. 대시보드 접속 후 **"설정"** 버튼 클릭
+2. 치지직 채널 ID 입력 (채널 URL에서 확인: `chzzk.naver.com/live/채널ID`)
+3. **"저장 및 연결"** 클릭
+
+> 성인 인증이 필요 없는 방송이면 쿠키(NID_AUT, NID_SES)는 비워두세요.
+
 ## 실행
 
-### Claude Code 연동 (실제 사용)
-
-코딩 작업을 수행할 프로젝트 디렉토리에서 실행합니다:
+코딩 작업을 수행할 프로젝트 디렉토리에서:
 
 ```bash
-cd ~/dev/my-project  # 아이디어를 구현할 프로젝트
+cd ~/dev/my-project
 claude --dangerously-load-development-channels server:chzzk-ideas
 ```
 
-Claude Code가 `~/.mcp.json`을 읽고 서버를 자동으로 실행합니다. 시청자 아이디어를 선택하면 **현재 디렉토리**에서 Claude가 코딩 작업을 수행합니다.
+Claude Code가 서버를 자동 실행합니다. 별도로 서버를 띄울 필요 없습니다.
 
 - **대시보드**: http://localhost:8789
 - **OBS 오버레이**: http://localhost:8789/?obs=true
 
-### 대시보드만 테스트
+## 사용법
 
-Claude Code 없이 대시보드만 확인하고 싶은 경우:
+### 아이디어 수집
 
-```bash
-cd /클론한경로/chzzkDevChat
-bun run server.ts
-```
+1. 대시보드에서 **"아이디어 수집 시작"** 클릭 (기본 꺼짐)
+2. 시청자가 채팅에 `!아이디어 뱀 게임 만들어줘` 입력
+3. 대시보드에 아이디어 실시간 표시
+4. **"Claude에 전달"** 클릭 → Claude가 코딩 시작
+5. 끝나면 **"아이디어 수집 중지"** 클릭
 
-> MCP stdio 연결 관련 에러가 나올 수 있지만 대시보드는 정상 동작합니다.
+### 시청자 투표
+
+Claude가 선택지를 제시하면:
+
+1. 대시보드에서 **"투표 생성"** 클릭
+2. 질문과 선택지 입력 → **"투표 시작"**
+3. 시청자가 채팅에 `!투표 1`, `!투표 2` 등으로 투표 (1인 1표)
+4. 대시보드에서 실시간 프로그레스 바 확인
+5. **"투표 종료"** 클릭 → 결과가 Claude에 전달 → 최다 득표 선택지로 진행
 
 ## 테스트
 
-치지직 방송 없이도 테스트용 API로 아이디어를 주입할 수 있습니다:
+방송 없이도 테스트용 API로 확인할 수 있습니다:
 
 ```bash
-# 테스트 아이디어 추가
-curl -X POST localhost:8789/test-idea -d "할일 목록 앱을 만들어주세요"
-
-# 여러 개 추가
-curl -X POST localhost:8789/test-idea -d "계산기 만들어줘"
+# 아이디어 추가
 curl -X POST localhost:8789/test-idea -d "뱀 게임 만들어줘"
+
+# 투표 생성
+curl -X POST localhost:8789/test-create-vote \
+  -H "Content-Type: application/json" \
+  -d '{"question":"프레임워크 선택","options":["React","Vue","Svelte"]}'
+
+# 투표하기
+curl -X POST localhost:8789/test-vote -d "1"
+curl -X POST localhost:8789/test-vote -d "3"
 ```
-
-대시보드(http://localhost:8789)에서 아이디어가 실시간으로 표시되고, "Claude에 전달" 버튼으로 Claude Code에 전달할 수 있습니다.
-
-## 사용법
-
-1. 시청자가 채팅에 `!아이디어 원하는 내용`을 입력
-2. 대시보드에 아이디어가 실시간으로 표시됨
-3. 스트리머가 "Claude에 전달" 버튼 클릭
-4. Claude Code 세션에 `<channel>` 태그로 아이디어가 도착
-5. Claude가 아이디어를 읽고 코딩 작업 수행
 
 ## Tech Stack
 
@@ -135,16 +133,16 @@ curl -X POST localhost:8789/test-idea -d "뱀 게임 만들어줘"
 ## 파일 구조
 
 ```
-├── server.ts           # MCP 채널 + 치지직 리스너 + 웹 대시보드
-├── dashboard.html.ts   # 대시보드 HTML/CSS/JS
+├── server.ts           # MCP 채널 + 치지직 리스너 + 웹 대시보드 + 설정 API
+├── dashboard.html.ts   # 대시보드 HTML/CSS/JS (설정, 아이디어, 투표)
 ├── types.ts            # 공유 타입 정의
 ├── .mcp.json           # Claude Code MCP 서버 등록
-├── .env                # 인증 정보 (git 미포함)
+├── config.json         # 설정 파일 (대시보드에서 자동 생성, git 미포함)
 └── CLAUDE.md           # Claude Code 프로젝트 지침
 ```
 
 ## 주의사항
 
-- 치지직 쿠키(`NID_AUT`, `NID_SES`)는 만료될 수 있음 — 대시보드에서 연결 상태 확인
+- 치지직 쿠키(`NID_AUT`, `NID_SES`)는 만료될 수 있음 — 대시보드 설정에서 재입력
 - 대시보드는 localhost 전용 (`127.0.0.1`) — 외부 노출 없음
-- `stdout`은 MCP stdio 전용이므로 `console.log` 사용 금지
+- 이전 서버 프로세스가 남아있으면 포트 충돌 발생 — Claude Code 재시작 전 확인
