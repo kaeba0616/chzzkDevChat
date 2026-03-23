@@ -379,8 +379,12 @@ async function connectChzzk() {
 
   try {
     const liveDetail = await client.live.detail(channelId);
-    if (!liveDetail?.chatChannelId) {
-      log("WARNING: Could not get chat channel ID. Is the stream live?");
+    if (!liveDetail || liveDetail.status !== "OPEN") {
+      log("WARNING: Stream is not live.");
+      return;
+    }
+    if (!liveDetail.chatChannelId) {
+      log("WARNING: Could not get chat channel ID.");
       return;
     }
 
