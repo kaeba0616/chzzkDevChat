@@ -298,6 +298,30 @@ export const dashboardHtml = `<!DOCTYPE html>
     cursor: default;
     box-shadow: none;
   }
+  .btn-copy {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    align-self: center;
+    margin-right: 6px;
+  }
+  .btn-copy:hover {
+    border-color: var(--text);
+    color: var(--text);
+  }
+  .btn-copy.copied {
+    border-color: var(--sent);
+    color: var(--sent);
+  }
 
   /* ── Connection toast ── */
   .toast {
@@ -863,6 +887,7 @@ function renderAll() {
     html += '</div>';
     html += '<div class="idea-text">' + esc(idea.ideaText) + '</div>';
     html += '</div>';
+    html += '<button class="btn-copy" data-text="' + esc(idea.ideaText).replace(/"/g, '&quot;') + '">복사</button>';
     html += '<button class="btn-select" data-id="' + idea.id + '"' + btnDisabled + '>' + btnText + '</button>';
     html += '</div>';
     return html;
@@ -870,6 +895,19 @@ function renderAll() {
 }
 
 document.getElementById('ideas').addEventListener('click', function(e) {
+  var copyBtn = e.target.closest('.btn-copy');
+  if (copyBtn) {
+    var text = copyBtn.getAttribute('data-text');
+    navigator.clipboard.writeText(text).then(function() {
+      copyBtn.textContent = '\\u2713 복사됨';
+      copyBtn.classList.add('copied');
+      setTimeout(function() {
+        copyBtn.textContent = '복사';
+        copyBtn.classList.remove('copied');
+      }, 1500);
+    });
+    return;
+  }
   var btn = e.target.closest('.btn-select');
   if (!btn || btn.disabled) return;
   selectIdea(btn.getAttribute('data-id'));
