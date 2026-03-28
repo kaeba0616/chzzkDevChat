@@ -699,7 +699,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <span class="tag">LIVE</span>
       </div>
       <div class="status-bar">
-        <span><span class="status-dot off" id="chzzk-status"></span>치지직</span>
+        <span><span class="status-dot off" id="chzzk-status"></span>치지직 <button id="btn-reconnect" onclick="reconnectChzzk()" style="font-size:10px;padding:1px 6px;margin-left:4px;cursor:pointer;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:3px;font-family:var(--font-mono)">재연결</button></span>
         <span><span class="status-dot off" id="ws-status"></span>대시보드</span>
       </div>
     </div>
@@ -929,6 +929,22 @@ function clearAll() {
 function setChzzkStatus(on) {
   const dot = document.getElementById('chzzk-status');
   dot.className = 'status-dot ' + (on ? 'on' : 'off');
+  var btn = document.getElementById('btn-reconnect');
+  if (btn) btn.style.display = on ? 'none' : '';
+}
+
+function reconnectChzzk() {
+  var btn = document.getElementById('btn-reconnect');
+  btn.textContent = '연결 중...';
+  btn.disabled = true;
+  fetch('/api/reconnect', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      setChzzkStatus(data.chzzkConnected);
+      if (!data.chzzkConnected) showToast('연결 실패 — 방송이 시작되었는지 확인하세요', true);
+    })
+    .catch(function() { showToast('재연결 요청 실패', true); })
+    .finally(function() { btn.textContent = '재연결'; btn.disabled = false; });
 }
 
 function setWsStatus(on) {

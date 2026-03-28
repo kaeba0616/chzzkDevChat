@@ -164,6 +164,11 @@ const server = Bun.serve({
       });
     }
 
+    // API: reconnect to Chzzk
+    if (url.pathname === "/api/reconnect" && req.method === "POST") {
+      return connectChzzk().then(() => Response.json({ ok: true, chzzkConnected }));
+    }
+
     // API: test idea injection
     if (url.pathname === "/test-idea" && req.method === "POST") {
       return req.text().then((body) => {
