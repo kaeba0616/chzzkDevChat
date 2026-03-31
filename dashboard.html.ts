@@ -940,11 +940,14 @@ function reconnectChzzk() {
   fetch('/api/reconnect', { method: 'POST' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      setChzzkStatus(data.chzzkConnected);
-      if (!data.chzzkConnected) showToast('연결 실패 — 방송이 시작되었는지 확인하세요', true);
+      if (data.chzzkConnected) {
+        btn.style.display = 'none';
+      } else {
+        showToast('연결 실패 — 방송이 시작되었는지 확인하세요', true);
+      }
     })
     .catch(function() { showToast('재연결 요청 실패', true); })
-    .finally(function() { btn.textContent = '재연결'; btn.disabled = false; });
+    .finally(function() { btn.textContent = '재연결'; btn.disabled = false; btn.style.display = ''; });
 }
 
 function setWsStatus(on) {
