@@ -74,7 +74,16 @@ bun install
 
 ## 실행
 
-코딩 작업을 수행할 프로젝트 디렉토리에서:
+### 방법 1: chzzkDevChat 디렉토리에서 실행
+
+```bash
+cd chzzkDevChat
+claude --dangerously-load-development-channels server:chzzk-ideas
+```
+
+### 방법 2: 다른 프로젝트에서 실행
+
+`~/.mcp.json`에 절대경로로 등록하면 어떤 디렉토리에서든 사용할 수 있습니다 (위 [MCP 서버 등록](#mcp-서버-등록) 참고).
 
 ```bash
 cd ~/dev/my-project
@@ -82,6 +91,8 @@ claude --dangerously-load-development-channels server:chzzk-ideas
 ```
 
 Claude Code가 서버를 자동 실행합니다. 별도로 서버를 띄울 필요 없습니다.
+
+> **주의**: `.mcp.json`이 현재 디렉토리 또는 `~/.mcp.json`에 있어야 `/mcp`에서 chzzk-ideas가 표시됩니다.
 
 - **대시보드**: http://localhost:8789
 - **OBS 오버레이**: http://localhost:8789/?obs=true
