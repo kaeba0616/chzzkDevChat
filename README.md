@@ -108,6 +108,18 @@ Claude가 선택지를 제시하면:
 4. 대시보드에서 실시간 프로그레스 바 확인
 5. **"투표 종료"** 클릭 → 결과가 Claude에 전달 → 최다 득표 선택지로 진행
 
+### 치지직 재연결
+
+앱 실행 후 방송을 시작한 경우, 대시보드 상단 치지직 상태 옆 **"재연결"** 버튼을 클릭하면 채팅에 연결됩니다.
+
+### 세션 재개
+
+기존 세션을 이어서 사용할 때도 채널 플래그가 필요합니다:
+
+```bash
+claude --resume <session-id> --dangerously-load-development-channels server:chzzk-ideas
+```
+
 ## 테스트
 
 방송 없이도 테스트용 API로 확인할 수 있습니다:
@@ -143,13 +155,11 @@ curl -X POST localhost:8789/test-vote -d "3"
 └── CLAUDE.md           # Claude Code 프로젝트 지침
 ```
 
-### 치지직 재연결
-
-앱 실행 후 방송을 시작한 경우, 대시보드 상단 치지직 상태 옆 **"재연결"** 버튼을 클릭하면 채팅에 연결됩니다.
-
 ## 주의사항
 
 - 치지직 쿠키(`NID_AUT`, `NID_SES`)는 만료될 수 있음 — 대시보드 설정에서 재입력
 - 대시보드는 localhost 전용 (`127.0.0.1`) — 외부 노출 없음
 - 이전 서버 프로세스가 남아있으면 포트 충돌 발생 — Claude Code 재시작 전 확인
 - 방송 시작 전에 앱을 실행하면 채팅 연결이 안 됨 — 방송 시작 후 **"재연결"** 버튼 사용
+- 프로젝트 디렉토리에 로컬 `.mcp.json`이 있으면 `~/.mcp.json`과 별도로 `chzzk-ideas`를 추가해야 함
+- 세션 재개(`--resume`) 시에도 `--dangerously-load-development-channels server:chzzk-ideas` 플래그 필요
